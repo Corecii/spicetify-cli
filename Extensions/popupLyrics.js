@@ -327,6 +327,7 @@ function PopupLyrics() {
 	const userConfigs = {
 		smooth: boolLocalStorage("popup-lyrics:smooth"),
 		centerAlign: boolLocalStorage("popup-lyrics:center-align"),
+		verticalAlign: boolLocalStorage("popup-lyrics:vertical-align", true),
 		showCover: boolLocalStorage("popup-lyrics:show-cover"),
 		fontSize: Number(LocalStorage.get("popup-lyrics:font-size")),
 		blurSize: Number(LocalStorage.get("popup-lyrics:blur-size")),
@@ -391,6 +392,15 @@ function PopupLyrics() {
 			break;
 		case "169":
 			lyricVideo.height = Math.round((lyricVideo.width * 9) / 16);
+			break;
+		case "1031":
+			lyricVideo.height = Math.round((lyricVideo.width * 1) / 3);
+			break;
+		case "1041":
+			lyricVideo.height = Math.round((lyricVideo.width * 1) / 4);
+			break;
+		case "1051":
+			lyricVideo.height = Math.round((lyricVideo.width * 1) / 5);
 			break;
 		default:
 			lyricVideo.height = lyricVideo.width;
@@ -674,7 +684,7 @@ function PopupLyrics() {
 		const otherLineMargin = otherLineFontSize * 1;
 		const otherLineOpacity = 0.35;
 		const marginWidth = ctx.canvas.width * 0.075;
-		const animateDuration = userConfigs.smooth ? 0.3 : 0;
+		const animateDuration = (userConfigs.smooth & userConfigs.verticalAlign) ? 0.3 : 0;
 		const hCenter = userConfigs.centerAlign;
 		const fontFamily = `${userConfigs.fontFamily}, sans-serif`;
 
@@ -705,7 +715,7 @@ function PopupLyrics() {
 
 		drawBackground(ctx, userConfigs.backgroundImage);
 
-		const { offscreenCtx, gradient1 } = initOffscreenCtx(ctx);
+		const { offscreenCtx, gradient1, gradient2 } = initOffscreenCtx(ctx);
 		offscreenCtx.save();
 
 		// focus line
@@ -726,53 +736,56 @@ function PopupLyrics() {
 		}).height;
 
 		const pos = drawParagraph(offscreenCtx, lyrics[currentIndex].text, {
-			vCenter: true,
+			vCenter: userConfigs.verticalAlign,
 			hCenter,
+			top: userConfigs.verticalAlign ? undefined : focusLineFontSize * 0.5,
 			left: marginWidth,
 			right: progressRight,
 			lineHeight: fLineHeight,
 			translateY: (selfHeight) => ((prevLineFocusHeight + selfHeight) / 2 + focusLineMargin) * (1 - progress),
 		});
-		// offscreenCtx.strokeRect(pos.left, pos.top, pos.width, pos.height);
 
-		// prev line
-		let lastBeforePos = pos;
-		for (let i = 0; i < currentIndex; i++) {
-			if (i === 0) {
-				const prevProgressLineFontSize = otherLineFontSize + (1 - progress) * (focusLineFontSize - otherLineFontSize);
-				const prevProgressLineOpacity = otherLineOpacity + (1 - progress) * (1 - otherLineOpacity);
-				offscreenCtx.fillStyle = `rgba(255, 255, 255, ${prevProgressLineOpacity})`;
-				offscreenCtx.font = `bold ${prevProgressLineFontSize}px ${fontFamily}`;
-			} else {
-				offscreenCtx.fillStyle = `rgba(255, 255, 255, ${otherLineOpacity})`;
-				offscreenCtx.font = `bold ${otherLineFontSize}px ${fontFamily}`;
+		 // Only draw other lyrics if we're in vertical center mode
+		if (userConfigs.verticalAlign) {
+			// prev line
+			let lastBeforePos = pos;
+			for (let i = 0; i < currentIndex; i++) {
+				if (i === 0) {
+					const prevProgressLineFontSize = otherLineFontSize + (1 - progress) * (focusLineFontSize - otherLineFontSize);
+					const prevProgressLineOpacity = otherLineOpacity + (1 - progress) * (1 - otherLineOpacity);
+					offscreenCtx.fillStyle = `rgba(255, 255, 255, ${prevProgressLineOpacity})`;
+					offscreenCtx.font = `bold ${prevProgressLineFontSize}px ${fontFamily}`;
+				} else {
+					offscreenCtx.fillStyle = `rgba(255, 255, 255, ${otherLineOpacity})`;
+					offscreenCtx.font = `bold ${otherLineFontSize}px ${fontFamily}`;
+				}
+				lastBeforePos = drawParagraph(offscreenCtx, lyrics[currentIndex - 1 - i].text, {
+					hCenter,
+					bottom: i === 0 ? lastBeforePos.top - focusLineMargin : lastBeforePos.top - otherLineMargin,
+					left: marginWidth,
+					right: i === 0 ? marginWidth + progress * (otherRight - marginWidth) : otherRight,
+					lineHeight: i === 0 ? otherLineHeight + (1 - progress) * (focusLineHeight - otherLineHeight) : otherLineHeight,
+				});
+				if (lastBeforePos.top < 0) break;
 			}
-			lastBeforePos = drawParagraph(offscreenCtx, lyrics[currentIndex - 1 - i].text, {
-				hCenter,
-				bottom: i === 0 ? lastBeforePos.top - focusLineMargin : lastBeforePos.top - otherLineMargin,
-				left: marginWidth,
-				right: i === 0 ? marginWidth + progress * (otherRight - marginWidth) : otherRight,
-				lineHeight: i === 0 ? otherLineHeight + (1 - progress) * (focusLineHeight - otherLineHeight) : otherLineHeight,
-			});
-			if (lastBeforePos.top < 0) break;
-		}
-		// next line
-		offscreenCtx.fillStyle = `rgba(255, 255, 255, ${otherLineOpacity})`;
-		offscreenCtx.font = `bold ${otherLineFontSize}px ${fontFamily}`;
-		let lastAfterPos = pos;
-		for (let i = currentIndex + 1; i < lyrics.length; i++) {
-			lastAfterPos = drawParagraph(offscreenCtx, lyrics[i].text, {
-				hCenter,
-				top: i === currentIndex + 1 ? lastAfterPos.bottom + focusLineMargin : lastAfterPos.bottom + otherLineMargin,
-				left: marginWidth,
-				right: otherRight,
-				lineHeight: otherLineHeight,
-			});
-			if (lastAfterPos.bottom > ctx.canvas.height) break;
+			// next line
+			offscreenCtx.fillStyle = `rgba(255, 255, 255, ${otherLineOpacity})`;
+			offscreenCtx.font = `bold ${otherLineFontSize}px ${fontFamily}`;
+			let lastAfterPos = pos;
+			for (let i = currentIndex + 1; i < lyrics.length; i++) {
+				lastAfterPos = drawParagraph(offscreenCtx, lyrics[i].text, {
+					hCenter,
+					top: i === currentIndex + 1 ? lastAfterPos.bottom + focusLineMargin : lastAfterPos.bottom + otherLineMargin,
+					left: marginWidth,
+					right: otherRight,
+					lineHeight: otherLineHeight,
+				});
+				if (lastAfterPos.bottom > ctx.canvas.height) break;
+			}
 		}
 
 		offscreenCtx.globalCompositeOperation = "source-in";
-		offscreenCtx.fillStyle = gradient1;
+		offscreenCtx.fillStyle = userConfigs.verticalAlign ? gradient1 : gradient2;
 		offscreenCtx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 		offscreenCtx.restore();
 		ctx.drawImage(offscreenCtx.canvas, 0, 0);
@@ -933,11 +946,15 @@ button.btn:disabled {
 				userConfigs.centerAlign = state;
 				LocalStorage.set("popup-lyrics:center-align", String(state));
 			});
+			const verticalAlign = createSlider("Center lyrics vertically", userConfigs.verticalAlign, (state) => {
+				userConfigs.verticalAlign = state;
+				LocalStorage.set("popup-lyrics:vertical-align", String(state));
+			});
 			const cover = createSlider("Show cover", userConfigs.showCover, (state) => {
 				userConfigs.showCover = state;
 				LocalStorage.set("popup-lyrics:show-cover", String(state));
 			});
-			const ratio = createOptions("Aspect ratio", { 11: "1:1", 43: "4:3", 169: "16:9" }, userConfigs.ratio, (state) => {
+			const ratio = createOptions("Aspect ratio", { 11: "1:1", 43: "4:3", 169: "16:9", 1031: "3:1", 1041: "4:1", 1051: "5:1" }, userConfigs.ratio, (state) => {
 				userConfigs.ratio = state;
 				LocalStorage.set("popup-lyrics:ratio", state);
 				let value = lyricVideo.width;
@@ -951,6 +968,15 @@ button.btn:disabled {
 					case "169":
 						value = Math.round((lyricVideo.width * 9) / 16);
 						break;
+					case "1031":
+						value = Math.round((lyricVideo.width * 1) / 3);
+						break;
+					case "1041":
+						value = Math.round((lyricVideo.width * 1) / 4);
+						break;
+					case "1051":
+						value = Math.round((lyricVideo.width * 1) / 5);
+						break;
 				}
 				lyricVideo.height = lyricCanvas.height = value;
 				offscreenCtx = null;
@@ -958,6 +984,11 @@ button.btn:disabled {
 			const fontSize = createOptions(
 				"Font size",
 				{
+					10: "10px",
+					14: "14px",
+					18: "18px",
+					22: "22px",
+					26: "26px",
 					30: "30px",
 					34: "34px",
 					38: "38px",
@@ -1056,6 +1087,7 @@ button.btn:disabled {
 				optionHeader,
 				smooth,
 				center,
+				verticalAlign, // Add the new setting option
 				cover,
 				blurSize,
 				fontSize,
